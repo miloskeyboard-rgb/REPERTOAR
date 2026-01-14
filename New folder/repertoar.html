@@ -1,0 +1,691 @@
+import React, { useState, useEffect } from 'react';
+import { Music, Sun, Moon, Plus, ChevronLeft, List, Star, Minus, Edit2, X, Save, Trash2, Search } from 'lucide-react';
+
+const initialData = {
+  songs: [
+    { id: 1, title: "Kafana je moja sudbina", key: "Am", rhythm: "Valcer", bpm: 120, gender: "M", favorite: true, fontSize: 20, lyrics: "Kafana je moja sudbina\nTu onde gde lome se čaše" },
+    { id: 2, title: "Nije ljubav stvar", key: "Dm", rhythm: "Balada", bpm: 75, gender: "Ž", favorite: false, fontSize: 20, lyrics: "Nije ljubav stvar\nKoju možeš da zaboraviš" },
+    { id: 3, title: "Zagrli me", key: "G", rhythm: "Pop", bpm: 95, gender: "Duet", favorite: true, fontSize: 20, lyrics: "[M] Zagrli me kao pre\n[Ž] Poljubi me nežno" },
+    { id: 4, title: "Uspavanka", key: "C", rhythm: "Balada", bpm: 70, gender: "Ž", favorite: false, fontSize: 20, lyrics: "Spavaj, spavaj mala moja" }
+  ],
+  setLists: [
+    { id: 1, name: "Svadba - Petak", songs: [1, 3, 2] },
+    { id: 2, name: "Rođendan", songs: [3, 1] }
+  ]
+};
+
+export default function RepertoarApp() {
+  const [view, setView] = useState('home');
+  const [currentSong, setCurrentSong] = useState(null);
+  const [data, setData] = useState(initialData);
+  const [selectedSetList, setSelectedSetList] = useState(null);
+  const [showModal, setShowModal] = useState(null);
+  const [formData, setFormData] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterGender, setFilterGender] = useState('all');
+  const [filterKey, setFilterKey] = useState('all');
+  const [filterRhythm, setFilterRhythm] = useState('all');
+  const [draggedIndex, setDraggedIndex] = useState(null);
+  const [insertPosition, setInsertPosition] = useState(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('repertoar_data_v2');
+    if (saved) {
+      try {
+        setData(JSON.parse(saved));
+      } catch (e) {}
+    }
+  }, []);
+
+  const saveData = (newData) => {
+    setData(newData);
+    localStorage.setItem('repertoar_data_v2', JSON.stringify(newData));
+  };
+
+  const changeFontSize = (songId, delta) => {
+    const newData = { ...data };
+    const song = newData.songs.find(s => s.id === songId);
+    if (song) {
+      song.fontSize = Math.max(14, Math.min(36, song.fontSize + delta));
+      saveData(newData);
+      setCurrentSong(song);
+    }
+  };
+
+  const toggleFavorite = (songId) => {
+    const newData = { ...data };
+    const song = newData.songs.find(s => s.id === songId);
+    if (song) {
+      song.favorite = !song.favorite;
+      saveData(newData);
+      if (currentSong && currentSong.id === songId) setCurrentSong(song);
+    }
+  };
+
+  const createSetList = () => {
+    if (!formData.name?.trim()) return;
+    const newData = { ...data };
+    const newId = Math.max(0, ...newData.setLists.map(sl => sl.id)) + 1;
+    newData.setLists.push({ id: newId, name: formData.name.trim(), songs: [] });
+    saveData(newData);
+    setShowModal(null);
+    setFormData({});
+  };
+
+  const addSong = () => {
+    if (!formData.title?.trim()) return;
+    const newData = { ...data };
+    const newId = Math.max(0, ...newData.songs.map(s => s.id)) + 1;
+    const song = {
+      id: newId,
+      title: formData.title.trim(),
+      key: formData.key || 'C',
+      rhythm: formData.rhythm || 'Pop',
+      bpm: parseInt(formData.bpm) || 120,
+      gender: formData.gender || 'M',
+      favorite: false,
+      fontSize: 20,
+      lyrics: formData.lyrics || ''
+    };
+    newData.songs.push(song);
+    saveData(newData);
+    setShowModal(null);
+    setFormData({});
+  };
+
+  const updateSong = () => {
+    if (!formData.title?.trim()) return;
+    const newData = { ...data };
+    const song = newData.songs.find(s => s.id === formData.id);
+    if (song) {
+      song.title = formData.title.trim();
+      song.key = formData.key || 'C';
+      song.rhythm = formData.rhythm || 'Pop';
+      song.bpm = parseInt(formData.bpm) || 120;
+      song.gender = formData.gender || 'M';
+      song.lyrics = formData.lyrics || '';
+      saveData(newData);
+      if (currentSong && currentSong.id === formData.id) {
+        setCurrentSong(song);
+      }
+    }
+    setShowModal(null);
+    setFormData({});
+  };
+
+  const deleteSong = (songId) => {
+    const newData = { ...data };
+    newData.songs = newData.songs.filter(s => s.id !== songId);
+    newData.setLists = newData.setLists.map(sl => ({
+      ...sl,
+      songs: sl.songs.filter(id => id !== songId)
+    }));
+    saveData(newData);
+    setShowModal(null);
+  };
+
+  const addToSetList = (songId) => {
+    const newData = { ...data };
+    const setList = newData.setLists.find(sl => sl.id === selectedSetList);
+    if (setList && !setList.songs.includes(songId)) {
+      if (insertPosition !== null) {
+        setList.songs.splice(insertPosition, 0, songId);
+        setInsertPosition(null);
+      } else {
+        setList.songs.push(songId);
+      }
+      saveData(newData);
+    }
+  };
+
+  const reorderSetList = (fromIndex, toIndex) => {
+    const newData = { ...data };
+    const setList = newData.setLists.find(sl => sl.id === selectedSetList);
+    if (setList) {
+      const songs = [...setList.songs];
+      const [removed] = songs.splice(fromIndex, 1);
+      songs.splice(toIndex, 0, removed);
+      setList.songs = songs;
+      saveData(newData);
+    }
+  };
+
+  const removeSongFromSetList = (songId) => {
+    const newData = { ...data };
+    const setList = newData.setLists.find(sl => sl.id === selectedSetList);
+    if (setList) {
+      setList.songs = setList.songs.filter(id => id !== songId);
+      saveData(newData);
+    }
+  };
+
+  const addNewSongToSetList = () => {
+    if (!formData.title?.trim()) return;
+    const newData = { ...data };
+    const newId = Math.max(0, ...newData.songs.map(s => s.id)) + 1;
+    const song = {
+      id: newId,
+      title: formData.title.trim(),
+      key: formData.key || 'C',
+      rhythm: formData.rhythm || 'Pop',
+      bpm: parseInt(formData.bpm) || 120,
+      gender: formData.gender || 'M',
+      favorite: false,
+      fontSize: 20,
+      lyrics: formData.lyrics || ''
+    };
+    newData.songs.push(song);
+    
+    const setList = newData.setLists.find(sl => sl.id === selectedSetList);
+    if (setList) {
+      if (insertPosition !== null) {
+        setList.songs.splice(insertPosition, 0, newId);
+        setInsertPosition(null);
+      } else {
+        setList.songs.push(newId);
+      }
+    }
+    
+    saveData(newData);
+    setShowModal(null);
+    setFormData({});
+  };
+
+  const getSongsInSetList = (setListId) => {
+    const setList = data.setLists.find(sl => sl.id === setListId);
+    if (!setList) return [];
+    return setList.songs.map(songId => data.songs.find(s => s.id === songId)).filter(Boolean);
+  };
+
+  const uniqueKeys = ['all', ...new Set(data.songs.map(s => s.key))];
+  const uniqueRhythms = ['all', ...new Set(data.songs.map(s => s.rhythm))];
+
+  const filteredSongs = data.songs.filter(song => {
+    const matchesSearch = song.title.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesGender = filterGender === 'all' || song.gender === filterGender;
+    const matchesKey = filterKey === 'all' || song.key === filterKey;
+    const matchesRhythm = filterRhythm === 'all' || song.rhythm === filterRhythm;
+    return matchesSearch && matchesGender && matchesKey && matchesRhythm;
+  });
+
+  // HOME - Glavni meni
+  if (view === 'home') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black text-white">
+        <div className="bg-black/50 backdrop-blur-lg border-b border-orange-900/30 sticky top-0 z-10">
+          <div className="px-6 py-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-lg shadow-orange-500/50">
+                <Music className="w-8 h-8 text-white" />
+              </div>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">REPERTOAR</h1>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 py-8 space-y-6">
+          <button onClick={() => setView('performance')} className="w-full p-8 rounded-2xl bg-gradient-to-br from-orange-600 to-orange-700 hover:from-orange-500 hover:to-orange-600 shadow-2xl shadow-orange-500/40 transition-all transform hover:scale-105">
+            <Music className="w-16 h-16 mx-auto mb-4 text-white" />
+            <h2 className="text-3xl font-bold text-white mb-2">Performance Mode</h2>
+            <p className="text-orange-100 text-lg">{data.songs.length} pesama u repertoaru</p>
+          </button>
+
+          <button onClick={() => setView('setLists')} className="w-full p-8 rounded-2xl bg-gradient-to-br from-gray-800 to-gray-900 hover:from-gray-700 hover:to-gray-800 border-2 border-orange-500/30 hover:border-orange-500/50 shadow-xl transition-all transform hover:scale-105">
+            <List className="w-16 h-16 mx-auto mb-4 text-orange-400" />
+            <h2 className="text-3xl font-bold text-white mb-2">Set Liste</h2>
+            <p className="text-gray-400 text-lg">{data.setLists.length} set lista</p>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // PERFORMANCE MODE - Sve pesme sa filterima
+  if (view === 'performance') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black text-white">
+        <div className="bg-black/50 backdrop-blur-lg border-b border-orange-900/30 sticky top-0 z-10">
+          <div className="px-6 py-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setView('home')} className="p-2 rounded-lg bg-gray-800/50 hover:bg-gray-700 border border-orange-500/20">
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <h1 className="text-2xl font-bold text-orange-400">Performance Mode</h1>
+              </div>
+              <button onClick={() => { setShowModal('song'); setFormData({ gender: 'M', key: 'C', rhythm: 'Pop', bpm: '120' }); }} className="px-4 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold flex items-center gap-2 shadow-lg shadow-orange-500/30">
+                <Plus className="w-4 h-4" />Nova
+              </button>
+            </div>
+
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+              <input
+                type="text"
+                placeholder="Pretraži..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 rounded-xl bg-gray-800/50 text-white placeholder-gray-500 border border-orange-900/30 focus:outline-none focus:border-orange-500/50"
+              />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                <button onClick={() => setFilterGender('all')} className={`px-4 py-2 rounded-lg whitespace-nowrap font-semibold ${filterGender === 'all' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>Sve</button>
+                <button onClick={() => setFilterGender('M')} className={`px-4 py-2 rounded-lg whitespace-nowrap font-semibold ${filterGender === 'M' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>♂ Muške</button>
+                <button onClick={() => setFilterGender('Ž')} className={`px-4 py-2 rounded-lg whitespace-nowrap font-semibold ${filterGender === 'Ž' ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>♀ Ženske</button>
+                <button onClick={() => setFilterGender('Duet')} className={`px-4 py-2 rounded-lg whitespace-nowrap font-semibold ${filterGender === 'Duet' ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>♂♀ Dueti</button>
+              </div>
+
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {uniqueKeys.map(key => (
+                  <button key={key} onClick={() => setFilterKey(key)} className={`px-4 py-2 rounded-lg whitespace-nowrap font-semibold ${filterKey === key ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>
+                    {key === 'all' ? 'Sve tonalitete' : key}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {uniqueRhythms.map(rhythm => (
+                  <button key={rhythm} onClick={() => setFilterRhythm(rhythm)} className={`px-4 py-2 rounded-lg whitespace-nowrap font-semibold ${filterRhythm === rhythm ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>
+                    {rhythm === 'all' ? 'Svi ritmovi' : rhythm}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 py-6">
+          <div className="text-sm text-gray-400 mb-4">
+            Pronađeno: <span className="text-orange-400 font-bold">{filteredSongs.length}</span> pesama
+          </div>
+          <div className="grid gap-3">
+            {filteredSongs.map(song => (
+              <div key={song.id} className="group relative p-4 rounded-xl bg-gradient-to-br from-gray-800/80 to-gray-900/80 border border-orange-900/20 hover:border-orange-500/40 cursor-pointer transition-all shadow-lg hover:shadow-orange-500/10">
+                <div onClick={() => { setCurrentSong(song); setView('songView'); }}>
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="font-bold text-xl text-white">{song.title}</h3>
+                    {song.favorite && <Star className="w-5 h-5 fill-orange-500 text-orange-500" />}
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-sm">
+                    <span className={`px-3 py-1 rounded-lg font-medium ${song.gender === 'M' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : song.gender === 'Ž' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'}`}>
+                      {song.gender === 'M' ? '♂ Muška' : song.gender === 'Ž' ? '♀ Ženska' : '♂♀ Duet'}
+                    </span>
+                    <span className="px-3 py-1 rounded-lg bg-orange-500/10 text-orange-400 border border-orange-500/20">{song.key}</span>
+                    <span className="px-3 py-1 rounded-lg bg-gray-700/50 text-gray-300 border border-gray-600/30">{song.rhythm}</span>
+                    <span className="px-3 py-1 rounded-lg bg-gray-700/50 text-gray-300 border border-gray-600/30">{song.bpm} BPM</span>
+                  </div>
+                </div>
+                <button onClick={(e) => { e.stopPropagation(); setFormData(song); setShowModal('edit'); }} className="absolute top-4 right-4 p-2 rounded-lg bg-gray-800/80 hover:bg-orange-500/20 border border-orange-500/20 opacity-0 group-hover:opacity-100 transition-all">
+                  <Edit2 className="w-4 h-4 text-orange-400" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {(showModal === 'song' || showModal === 'edit') && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 px-6 overflow-y-auto py-6">
+            <div className="bg-gradient-to-br from-gray-900 to-black rounded-2xl p-6 max-w-lg w-full shadow-2xl border border-orange-500/20 my-6">
+              <h3 className="text-2xl font-bold mb-5 text-orange-400">{showModal === 'edit' ? 'Izmeni Pesmu' : 'Nova Pesma'}</h3>
+              <div className="space-y-4">
+                <input type="text" placeholder="Naziv pesme *" value={formData.title || ''} onChange={(e) => setFormData({...formData, title: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-gray-800/50 text-white border border-orange-500/20 focus:outline-none focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/20" autoFocus />
+                <div className="grid grid-cols-3 gap-3">
+                  <input type="text" placeholder="Tonalitet" value={formData.key || ''} onChange={(e) => setFormData({...formData, key: e.target.value})} className="px-4 py-3 rounded-xl bg-gray-800/50 text-white border border-orange-500/20 focus:outline-none" />
+                  <input type="text" placeholder="Ritam" value={formData.rhythm || ''} onChange={(e) => setFormData({...formData, rhythm: e.target.value})} className="px-4 py-3 rounded-xl bg-gray-800/50 text-white border border-orange-500/20 focus:outline-none" />
+                  <input type="number" placeholder="BPM" value={formData.bpm || ''} onChange={(e) => setFormData({...formData, bpm: e.target.value})} className="px-4 py-3 rounded-xl bg-gray-800/50 text-white border border-orange-500/20 focus:outline-none" />
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <button onClick={() => setFormData({...formData, gender: 'M'})} className={`px-4 py-3 rounded-xl font-semibold transition-all ${formData.gender === 'M' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>♂ Muška</button>
+                  <button onClick={() => setFormData({...formData, gender: 'Ž'})} className={`px-4 py-3 rounded-xl font-semibold transition-all ${formData.gender === 'Ž' ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>♀ Ženska</button>
+                  <button onClick={() => setFormData({...formData, gender: 'Duet'})} className={`px-4 py-3 rounded-xl font-semibold transition-all ${formData.gender === 'Duet' ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>♂♀ Duet</button>
+                </div>
+                <textarea placeholder="Tekst pesme" value={formData.lyrics || ''} onChange={(e) => setFormData({...formData, lyrics: e.target.value})} rows={8} className="w-full px-4 py-3 rounded-xl bg-gray-800/50 text-white border border-orange-500/20 focus:outline-none resize-none" />
+              </div>
+              <div className="flex gap-3 mt-6">
+                {showModal === 'edit' && (
+                  <button onClick={() => { setShowModal('deleteConfirm'); }} className="px-5 py-3 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 font-semibold transition-all">
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                )}
+                <button onClick={() => { setShowModal(null); setFormData({}); }} className="flex-1 px-5 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-semibold border border-gray-700 transition-all">Otkaži</button>
+                <button onClick={showModal === 'edit' ? updateSong : addSong} className="flex-1 px-5 py-3 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold shadow-lg shadow-orange-500/30 transition-all">
+                  {showModal === 'edit' ? 'Sačuvaj' : 'Dodaj'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showModal === 'deleteConfirm' && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 px-6">
+            <div className="bg-gradient-to-br from-gray-900 to-black rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-red-500/30">
+              <h3 className="text-xl font-bold mb-4 text-red-400">Obriši pesmu?</h3>
+              <p className="text-gray-300 mb-6">Da li si siguran da želiš da obrišeš "<strong>{formData.title}</strong>"?</p>
+              <div className="flex gap-3">
+                <button onClick={() => setShowModal('edit')} className="flex-1 px-4 py-3 rounded-xl bg-gray-800 text-white font-semibold">Otkaži</button>
+                <button onClick={() => deleteSong(formData.id)} className="flex-1 px-4 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold">Obriši</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // SET LISTS - Lista svih set lista
+  if (view === 'setLists') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black text-white">
+        <div className="bg-black/50 backdrop-blur-lg border-b border-orange-900/30 sticky top-0 z-10">
+          <div className="px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setView('home')} className="p-2 rounded-lg bg-gray-800/50 hover:bg-gray-700 border border-orange-500/20">
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <h1 className="text-2xl font-bold text-orange-400">Set Liste</h1>
+              </div>
+              <button onClick={() => { setShowModal('setlist'); setFormData({}); }} className="px-4 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold flex items-center gap-2 shadow-lg shadow-orange-500/30">
+                <Plus className="w-4 h-4" />Nova
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 py-6 grid gap-3">
+          {data.setLists.map(setList => (
+            <div key={setList.id} onClick={() => { setSelectedSetList(setList.id); setView('setListView'); }} className="p-5 rounded-xl bg-gradient-to-br from-orange-900/20 to-orange-800/10 border border-orange-500/30 hover:border-orange-500/50 cursor-pointer transition-all shadow-lg hover:shadow-orange-500/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-xl text-white mb-1">{setList.name}</h3>
+                  <p className="text-sm text-gray-400">{setList.songs.length} pesama</p>
+                </div>
+                <List className="w-8 h-8 text-orange-500" />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {showModal === 'setlist' && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 px-6">
+            <div className="bg-gradient-to-br from-gray-900 to-black rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-orange-500/20">
+              <h3 className="text-2xl font-bold mb-5 text-orange-400">Nova Set Lista</h3>
+              <input type="text" placeholder="Ime set liste" value={formData.name || ''} onChange={(e) => setFormData({...formData, name: e.target.value})} onKeyPress={(e) => e.key === 'Enter' && createSetList()} className="w-full px-4 py-3 rounded-xl bg-gray-800/50 text-white border border-orange-500/20 focus:outline-none focus:border-orange-500/50 mb-5" autoFocus />
+              <div className="flex gap-3">
+                <button onClick={() => { setShowModal(null); setFormData({}); }} className="flex-1 px-5 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-semibold border border-gray-700 transition-all">Otkaži</button>
+                <button onClick={createSetList} className="flex-1 px-5 py-3 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold shadow-lg shadow-orange-500/30 transition-all">Kreiraj</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // SET LIST VIEW - Pesme u set listi
+  if (view === 'setListView' && selectedSetList) {
+    const setList = data.setLists.find(sl => sl.id === selectedSetList);
+    const setListSongs = getSongsInSetList(selectedSetList);
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black text-white">
+        <div className="bg-black/50 backdrop-blur-lg border-b border-orange-900/30 sticky top-0 z-10 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button onClick={() => setView('setLists')} className="p-2 rounded-lg bg-gray-800/50 hover:bg-gray-700 border border-orange-500/20">
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <h1 className="text-2xl font-bold text-orange-400">{setList.name}</h1>
+            </div>
+            <button onClick={() => setShowModal('picker')} className="p-3 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-lg shadow-orange-500/30">
+              <Plus className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="px-6 py-6 space-y-3">
+          {setListSongs.map((song, index) => (
+            <div key={song.id} className="relative">
+              {insertPosition === index && (
+                <div className="mb-2 p-3 rounded-xl bg-orange-500/20 border-2 border-dashed border-orange-500 text-center text-orange-400 font-semibold">
+                  ↓ Nova pesma će biti ubačena ovde ↓
+                </div>
+              )}
+              <div
+                draggable
+                onDragStart={() => setDraggedIndex(index)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => {
+                  if (draggedIndex !== null && draggedIndex !== index) {
+                    reorderSetList(draggedIndex, index);
+                    setDraggedIndex(null);
+                  }
+                }}
+                className="p-4 rounded-xl bg-gradient-to-br from-gray-800/80 to-gray-900/80 border border-orange-900/20 hover:border-orange-500/40 cursor-move transition-all shadow-lg hover:shadow-orange-500/10"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="flex-shrink-0 w-12 h-12 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center font-bold text-white text-lg shadow-lg shadow-orange-500/50">
+                    {index + 1}
+                  </div>
+                  <div className="flex-1" onClick={() => { setCurrentSong(song); setView('songView'); }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-bold text-xl text-white">{song.title}</h3>
+                      {song.favorite && <Star className="w-5 h-5 fill-orange-500 text-orange-500" />}
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-sm">
+                      <span className={`px-3 py-1 rounded-lg font-medium ${song.gender === 'M' ? 'bg-blue-500/20 text-blue-400' : song.gender === 'Ž' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                        {song.gender === 'M' ? '♂' : song.gender === 'Ž' ? '♀' : '♂♀'}
+                      </span>
+                      <span className="px-3 py-1 rounded-lg bg-orange-500/10 text-orange-400">{song.key}</span>
+                      <span className="px-3 py-1 rounded-lg bg-gray-700/50 text-gray-300">{song.bpm} BPM</span>
+                    </div>
+                  </div>
+                  <button onClick={(e) => { e.stopPropagation(); removeSongFromSetList(song.id); }} className="p-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 transition-all">
+                    <X className="w-5 h-5 text-red-400" />
+                  </button>
+                </div>
+              </div>
+              <button
+                onClick={() => setInsertPosition(index + 1)}
+                className={`mt-2 w-full py-2 rounded-lg text-sm font-semibold transition-all ${insertPosition === index + 1 ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/50' : 'bg-gray-800/30 text-gray-500 hover:bg-gray-700/50 hover:text-orange-400 border border-gray-700/50'}`}
+              >
+                {insertPosition === index + 1 ? '✓ Ubaci novu pesmu ovde' : '+ Dodaj pesmu ispod'}
+              </button>
+            </div>
+          ))}
+          {insertPosition === setListSongs.length && (
+            <div className="p-3 rounded-xl bg-orange-500/20 border-2 border-dashed border-orange-500 text-center text-orange-400 font-semibold">
+              ↓ Nova pesma će biti ubačena ovde ↓
+            </div>
+          )}
+        </div>
+
+        {showModal === 'picker' && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 px-6">
+            <div className="bg-gradient-to-br from-gray-900 to-black rounded-2xl p-6 max-w-lg w-full shadow-2xl border border-orange-500/20 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-2xl font-bold text-orange-400">Dodaj Pesme</h3>
+                <button onClick={() => { setShowModal(null); setInsertPosition(null); }} className="p-2 rounded-lg bg-gray-800/50 hover:bg-gray-700 border border-orange-500/20">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {insertPosition !== null && (
+                <div className="mb-4 p-3 rounded-xl bg-orange-500/20 border border-orange-500/40 text-orange-400 text-sm font-semibold text-center">
+                  Pesma će biti ubačena na poziciju #{insertPosition + 1}
+                </div>
+              )}
+
+              <button
+                onClick={() => { setShowModal('newSong'); setFormData({ gender: 'M', key: 'C', rhythm: 'Pop', bpm: '120' }); }}
+                className="w-full mb-5 p-4 rounded-xl bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white font-bold flex items-center justify-center gap-2 shadow-lg shadow-green-500/30 transition-all"
+              >
+                <Plus className="w-5 h-5" />
+                Dodaj Novu Pesmu (i ubaci u listu)
+              </button>
+
+              <div className="mb-5 space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                  <input
+                    type="text"
+                    placeholder="Pretraži..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 rounded-xl bg-gray-800/50 text-white placeholder-gray-500 border border-orange-900/30 focus:outline-none focus:border-orange-500/50"
+                  />
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  <button onClick={() => setFilterGender('all')} className={`px-3 py-2 rounded-lg whitespace-nowrap text-sm font-semibold ${filterGender === 'all' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>Sve</button>
+                  <button onClick={() => setFilterGender('M')} className={`px-3 py-2 rounded-lg whitespace-nowrap text-sm font-semibold ${filterGender === 'M' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>♂ Muške</button>
+                  <button onClick={() => setFilterGender('Ž')} className={`px-3 py-2 rounded-lg whitespace-nowrap text-sm font-semibold ${filterGender === 'Ž' ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>♀ Ženske</button>
+                  <button onClick={() => setFilterGender('Duet')} className={`px-3 py-2 rounded-lg whitespace-nowrap text-sm font-semibold ${filterGender === 'Duet' ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>♂♀ Dueti</button>
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {uniqueKeys.map(key => (
+                    <button key={key} onClick={() => setFilterKey(key)} className={`px-3 py-2 rounded-lg whitespace-nowrap text-sm font-semibold ${filterKey === key ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>
+                      {key === 'all' ? 'Sve tonalitete' : key}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {uniqueRhythms.map(rhythm => (
+                    <button key={rhythm} onClick={() => setFilterRhythm(rhythm)} className={`px-3 py-2 rounded-lg whitespace-nowrap text-sm font-semibold ${filterRhythm === rhythm ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>
+                      {rhythm === 'all' ? 'Svi ritmovi' : rhythm}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="text-sm text-gray-400 mb-3">
+                Pronađeno: <span className="text-orange-400 font-bold">{filteredSongs.length}</span> pesama
+              </div>
+
+              <div className="space-y-2">
+                {filteredSongs.map(song => {
+                  const isInList = setList.songs.includes(song.id);
+                  return (
+                    <div key={song.id} onClick={() => !isInList && addToSetList(song.id)} className={`p-3 rounded-xl ${isInList ? 'bg-gray-800/30 opacity-50' : 'bg-gray-800/50 hover:bg-gray-700/50 cursor-pointer border border-orange-500/10 hover:border-orange-500/30'} transition-all`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-semibold text-white">{song.title}</h4>
+                          <div className="flex gap-2 text-xs mt-1">
+                            <span className={`px-2 py-1 rounded ${song.gender === 'M' ? 'bg-blue-500/20 text-blue-400' : song.gender === 'Ž' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                              {song.gender === 'M' ? '♂' : song.gender === 'Ž' ? '♀' : '♂♀'}
+                            </span>
+                            <span className="text-gray-400">{song.key} • {song.rhythm} • {song.bpm} BPM</span>
+                          </div>
+                        </div>
+                        {isInList && <span className="text-sm text-green-500 font-semibold">✓ Dodato</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showModal === 'newSong' && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 px-6 overflow-y-auto py-6">
+            <div className="bg-gradient-to-br from-gray-900 to-black rounded-2xl p-6 max-w-lg w-full shadow-2xl border border-orange-500/20 my-6">
+              <h3 className="text-2xl font-bold mb-5 text-orange-400">Nova Pesma (dodaj u performance + set listu)</h3>
+              <div className="space-y-4">
+                <input type="text" placeholder="Naziv pesme *" value={formData.title || ''} onChange={(e) => setFormData({...formData, title: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-gray-800/50 text-white border border-orange-500/20 focus:outline-none focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/20" autoFocus />
+                <div className="grid grid-cols-3 gap-3">
+                  <input type="text" placeholder="Tonalitet" value={formData.key || ''} onChange={(e) => setFormData({...formData, key: e.target.value})} className="px-4 py-3 rounded-xl bg-gray-800/50 text-white border border-orange-500/20 focus:outline-none" />
+                  <input type="text" placeholder="Ritam" value={formData.rhythm || ''} onChange={(e) => setFormData({...formData, rhythm: e.target.value})} className="px-4 py-3 rounded-xl bg-gray-800/50 text-white border border-orange-500/20 focus:outline-none" />
+                  <input type="number" placeholder="BPM" value={formData.bpm || ''} onChange={(e) => setFormData({...formData, bpm: e.target.value})} className="px-4 py-3 rounded-xl bg-gray-800/50 text-white border border-orange-500/20 focus:outline-none" />
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <button onClick={() => setFormData({...formData, gender: 'M'})} className={`px-4 py-3 rounded-xl font-semibold transition-all ${formData.gender === 'M' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>♂ Muška</button>
+                  <button onClick={() => setFormData({...formData, gender: 'Ž'})} className={`px-4 py-3 rounded-xl font-semibold transition-all ${formData.gender === 'Ž' ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>♀ Ženska</button>
+                  <button onClick={() => setFormData({...formData, gender: 'Duet'})} className={`px-4 py-3 rounded-xl font-semibold transition-all ${formData.gender === 'Duet' ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/50' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>♂♀ Duet</button>
+                </div>
+                <textarea placeholder="Tekst pesme" value={formData.lyrics || ''} onChange={(e) => setFormData({...formData, lyrics: e.target.value})} rows={8} className="w-full px-4 py-3 rounded-xl bg-gray-800/50 text-white border border-orange-500/20 focus:outline-none resize-none" />
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button onClick={() => { setShowModal('picker'); setFormData({}); }} className="flex-1 px-5 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-semibold border border-gray-700 transition-all">Nazad</button>
+                <button onClick={addNewSongToSetList} className="flex-1 px-5 py-3 rounded-xl bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold shadow-lg shadow-green-500/30 transition-all">
+                  Dodaj Pesmu
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // SONG VIEW - Prikaz pesme sa tekstom
+  if (view === 'songView' && currentSong) {
+    const renderLyrics = () => {
+      const lines = currentSong.lyrics.split('\n');
+      return lines.map((line, i) => {
+        if (currentSong.gender === 'Duet') {
+          if (line.startsWith('[M]')) {
+            return <div key={i} className="text-blue-400 font-semibold">{line.replace('[M]', '')}</div>;
+          } else if (line.startsWith('[Ž]')) {
+            return <div key={i} className="text-pink-400 font-semibold">{line.replace('[Ž]', '')}</div>;
+          } else if (line.includes('[ZAJEDNO]')) {
+            return <div key={i} className="text-purple-400 font-bold">{line.replace('[ZAJEDNO]', '')}</div>;
+          }
+        }
+        return <div key={i}>{line || '\u00A0'}</div>;
+      });
+    };
+
+    return (
+      <div className="min-h-screen bg-black text-white">
+        <div className="bg-black/90 px-4 py-3 flex items-center justify-between border-b border-orange-900/30">
+          <button onClick={() => setView(selectedSetList ? 'setListView' : 'performance')} className="p-2 rounded-lg bg-gray-800/50 border border-orange-500/20">
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          
+          <div className="flex gap-2">
+            <button onClick={() => changeFontSize(currentSong.id, -2)} className="p-2 rounded-lg bg-gray-800/50 border border-orange-500/20">
+              <Minus className="w-5 h-5" />
+            </button>
+            <button onClick={() => changeFontSize(currentSong.id, 2)} className="p-2 rounded-lg bg-gray-800/50 border border-orange-500/20">
+              <Plus className="w-5 h-5" />
+            </button>
+            <button onClick={() => toggleFavorite(currentSong.id)} className={`p-2 rounded-lg ${currentSong.favorite ? 'bg-orange-500 shadow-lg shadow-orange-500/50' : 'bg-gray-800/50 border border-orange-500/20'}`}>
+              <Star className={`w-5 h-5 ${currentSong.favorite ? 'fill-white' : ''}`} />
+            </button>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 bg-gradient-to-r from-orange-900/20 to-orange-800/10 border-b border-orange-900/30">
+          <h1 className="text-3xl font-bold mb-3 text-white">{currentSong.title}</h1>
+          <div className="flex flex-wrap gap-3">
+            <div className={`px-4 py-2 rounded-xl font-semibold ${currentSong.gender === 'M' ? 'bg-blue-500 shadow-lg shadow-blue-500/50' : currentSong.gender === 'Ž' ? 'bg-pink-500 shadow-lg shadow-pink-500/50' : 'bg-purple-500 shadow-lg shadow-purple-500/50'} text-white`}>
+              {currentSong.gender === 'M' ? '♂ Muška' : currentSong.gender === 'Ž' ? '♀ Ženska' : '♂♀ Duet'}
+            </div>
+            <div className="px-4 py-2 rounded-xl bg-orange-500/20 border border-orange-500/30 text-orange-400 font-bold text-lg">
+              {currentSong.key}
+            </div>
+            <div className="px-4 py-2 rounded-xl bg-gray-800/50 border border-gray-700 text-gray-300">
+              {currentSong.rhythm}
+            </div>
+            <div className="px-4 py-2 rounded-xl bg-gray-800/50 border border-gray-700 text-gray-300">
+              {currentSong.bpm} BPM
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 py-8">
+          <div style={{ fontSize: `${currentSong.fontSize}px` }} className="leading-relaxed whitespace-pre-line text-white">
+            {renderLyrics()}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
